@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cosmico Jogo da Velha 🦭</title>
+<style>
+body, html{
+    margin:0; padding:0;
+    width:100%; height:100%;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg,#1c1c1c,#2a2a2a);
+    color:white;
+}
+.container{
+    position:absolute;
+    width:100%; height:100%;
+    display:flex; flex-direction:column;
+    justify-content:center; align-items:center;
+    transition:opacity 0.5s ease;
+}
+.hidden{ opacity:0; pointer-events:none; }
+h1{ font-size:2.5em; margin-bottom:20px; text-align:center; }
+button{
+    border:none; padding:15px 40px; margin:10px;
+    border-radius:12px; font-size:1.2em; cursor:pointer;
+    transition: all 0.3s ease;
+}
+.backBtn{ background: linear-gradient(to right,#f00,#900); color:white;}
+.backBtn:hover{ transform: scale(1.1); filter: brightness(1.2);}
+#startIABtn{ background: linear-gradient(to right,#8f8,#2a2); color:black;}
+#btnLocal{ background: linear-gradient(to right,#a33,#777); color:white;}
+#btnIA{ background: linear-gradient(to right,#0af,#0ff); color:white;}
+#btnOnline{ background: linear-gradient(to right,#3a6,#654); color:white;}
+#btnLocal:hover, #btnIA:hover, #btnOnline:hover, #startIABtn:hover{ transform: scale(1.1); filter: brightness(1.2);}
+#nickDisplay{
+    position:absolute; top:10px; left:10px;
+    font-size:1.2em; font-weight:bold; color:#ff0;
+}
+.board{
+    display:grid;
+    grid-template-columns: repeat(3,120px);
+    grid-template-rows: repeat(3,120px);
+    gap:5px;
+    justify-content:center;
+}
+.cell{
+    width:120px; height:120px;
+    background:#444;
+    display:flex; justify-content:center; align-items:center;
+    font-size:3em; cursor:pointer; border-radius:8px;
+    color:white;
+    transition: all 0.2s ease;
+}
+.cell:hover{ transform: scale(1.05); filter: brightness(1.2);}
+#statusMsg{ margin-top:20px; font-size:1.5em; text-align:center; }
+@media(max-width:500px){
+    .board{ grid-template-columns: repeat(3,80px); grid-template-rows: repeat(3,80px);}
+    .cell{ width:80px; height:80px; font-size:2em;}
+}
+input{padding:10px 15px; border-radius:8px; border:none; font-size:1.2em; text-align:center; margin:5px;}
+</style>
+</head>
+<body>
+
+<div id="nickDisplay"></div>
+
+<!-- NICK -->
+<div id="nickScreen" class="container">
+    <h1>Escolha seu Nick</h1>
+    <input id="nickInput" placeholder="Digite seu nick">
+    <button id="saveNickBtn">Completar</button>
+</div>
+
+<!-- MENU -->
+<div id="menu" class="container hidden">
+    <h1>Cosmico Jogo da Velha 🦭</h1>
+    <button id="btnLocal">Local</button>
+    <button id="btnIA">Contra IA</button>
+    <button id="btnOnline">Online</button>
+</div>
+
+<!-- LOCAL -->
+<div id="localScreen" class="container hidden">
+    <h1>Modo Local</h1>
+    <div id="boardLocal" class="board"></div>
+    <div id="statusLocal">Turno: X</div>
+    <button class="backBtn">Voltar</button>
+    <button onclick="resetLocal()">Resetar Local</button>
+</div>
+
+<!-- IA -->
+<div id="iaScreen" class="container hidden">
+    <h1>Modo IA</h1>
+    <button id="startIABtn">Jogar</button>
+    <div id="boardIA" class="board" style="display:none;"></div>
+    <div id="statusIA"></div>
+    <button class="backBtn">Voltar</button>
+    <button onclick="resetIA()">Resetar IA</button>
+</div>
+
+<!-- ONLINE -->
+<div id="onlineScreen" class="container hidden">
+    <h1>Modo Online</h1>
+    <input id="roomInput" placeholder="Código da Sala">
+    <button id="createRoomBtn">Criar Sala</button>
+    <button id="joinRoomBtn">Entrar na Sala</button>
+    <div id="onlineBoard" class="board"></div>
+    <div id="statusOnline"></div>
+    <button class="backBtn">Voltar</button>
+</div>
+
+<script type="module">
+// -------- FIREBASE --------
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+import { getDatabase, ref, set, update, onValue } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA9E1JaFcmKM4JrKMzDhdDuGNRaUAwLwyw",
+  authDomain: "jogo-da-velha-online-1b9cf.firebaseapp.com",
+  databaseURL: "https://jogo-da-velha-online-1b9cf-default-rtdb.firebaseio.com",
+  projectId: "jogo-da-velha-online-1b9cf",
+  storageBucket: "jogo-da-velha-online-1b9cf.appspot.com",
+  messagingSenderId: "819285005834",
+  appId: "1:819285005834:web:e398094b28b5dc04c931f3"
+};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// -------- FADE --------
+function fade(hide, show){ hide.classList.add("hidden"); show.classList.remove("hidden");}
+
+// -------- NICK --------
+let nick = localStorage.getItem("nick")||"";
+const nickDisplay = document.getElementById("nickDisplay");
+if(nick) { nickDisplay.innerText=nick; fade(document.getElementById("nickScreen"),document.getElementById("menu")); }
+
+document.getElementById("saveNickBtn").onclick = ()=>{
+    const input = document.getElementById("nickInput").value.trim();
+    if(!input) return alert("Digite um nick");
+    nick = input;
+    localStorage.setItem("nick",nick);
+    nickDisplay.innerText = nick;
+    fade(document.getElementById("nickScreen"),document.getElementById("menu"));
+}
+
+// -------- MENU --------
+const menu=document.getElementById("menu");
+const localScreen=document.getElementById("localScreen");
+const iaScreen=document.getElementById("iaScreen");
+const onlineScreen=document.getElementById("onlineScreen");
+
+document.getElementById("btnLocal").onclick = ()=>{ fade(menu,localScreen); initLocal();}
+document.getElementById("btnIA").onclick = ()=>{ fade(menu,iaScreen);}
+document.getElementById("btnOnline").onclick = ()=>{ fade(menu,onlineScreen);}
+
+// -------- BACK --------
+document.querySelectorAll(".backBtn").forEach(btn=>btn.onclick=()=>{
+    fade(btn.parentElement,menu);
+})
+
+// -------- LOCAL --------
+let boardLocal=["","","","","","","","",""];
+let turnLocal="X";
+let gameOverLocal=false;
+function initLocal(){
+    const boardDiv=document.getElementById("boardLocal");
+    const statusDiv=document.getElementById("statusLocal");
+    boardDiv.innerHTML="";
+    statusDiv.innerText="Turno: "+turnLocal;
+    boardLocal=["","","","","","","","",""];
+    gameOverLocal=false;
+    for(let i=0;i<9;i++){
+        const cell=document.createElement("div");
+        cell.className="cell";
+        cell.innerText=boardLocal[i];
+        cell.onclick=()=>{
+            if(boardLocal[i]!=""||gameOverLocal) return;
+            boardLocal[i]=turnLocal;
+            cell.innerText=turnLocal;
+            if(checkWin(boardLocal)){ statusDiv.innerText=turnLocal+" venceu!"; gameOverLocal=true; return;}
+            if(checkDraw(boardLocal)){ statusDiv.innerText="Empate!"; gameOverLocal=true; return;}
+            turnLocal = turnLocal==="X"?"O":"X";
+            statusDiv.innerText="Turno: "+turnLocal;
+        }
+        boardDiv.appendChild(cell);
+    }
+}
+function resetLocal(){ turnLocal="X"; gameOverLocal=false; initLocal();}
+
+// -------- IA --------
+let boardIA=["","","","","","","","",""];
+let turnIA="X";
+let gameOverIA=false;
+function initIA(){
+    const boardDiv=document.getElementById("boardIA");
+    const statusDiv=document.getElementById("statusIA");
+    boardDiv.innerHTML="";
+    boardDiv.style.display="grid";
+    statusDiv.innerText="Turno: "+turnIA;
+    boardIA=["","","","","","","","",""];
+    gameOverIA=false;
+    for(let i=0;i<9;i++){
+        const cell=document.createElement("div");
+        cell.className="cell";
+        cell.innerText=boardIA[i];
+        cell.onclick=()=>{
+            if(boardIA[i]!=""||gameOverIA||turnIA!=="X") return;
+            boardIA[i]="X"; cell.innerText="X";
+            if(checkWin(boardIA)){ statusDiv.innerText="Você venceu!"; gameOverIA=true; return;}
+            if(checkDraw(boardIA)){ statusDiv.innerText="Empate!"; gameOverIA=true; return;}
+            turnIA="O"; statusDiv.innerText="Turno: "+turnIA;
+            setTimeout(()=>aiMove(),300);
+        }
+        boardDiv.appendChild(cell);
+    }
+}
+document.getElementById("startIABtn").onclick=()=>{
+    document.getElementById("startIABtn").style.display="none";
+    initIA();
+}
+function aiMove(){
+    if(gameOverIA) return;
+    let empty=boardIA.map((v,i)=>v===""?i:-1).filter(v=>v!==-1);
+    let move=empty[Math.floor(Math.random()*empty.length)];
+    boardIA[move]="O";
+    document.getElementById("boardIA").children[move].innerText="O";
+    if(checkWin(boardIA)){ document.getElementById("statusIA").innerText="IA venceu!"; gameOverIA=true; return;}
+    if(checkDraw(boardIA)){ document.getElementById("statusIA").innerText="Empate!"; gameOverIA=true; return;}
+    turnIA="X"; document.getElementById("statusIA").innerText="Turno: "+turnIA;
+}
+function resetIA(){ turnIA="X"; gameOverIA=false; document.getElementById("boardIA").innerHTML=""; document.getElementById("statusIA").innerText="Turno: "+turnIA; document.getElementById("startIABtn").style.display="block";}
+
+// -------- ONLINE --------
+const roomInput=document.getElementById("roomInput");
+const createRoomBtn=document.getElementById("createRoomBtn");
+const joinRoomBtn=document.getElementById("joinRoomBtn");
+const onlineBoard=document.getElementById("onlineBoard");
+const statusOnline=document.getElementById("statusOnline");
+
+function createRoom(){
+    const roomCode=Math.floor(1000+Math.random()*9000);
+    const roomRef=ref(db,"rooms/"+roomCode);
+    set(roomRef,{
+        board:["","","","","","","","",""],
+        turn:"X",
+        players:[nick],
+        messages:[`${nick} entrou na sala 🟢`]
+    });
+    listenRoom(roomCode,nick);
+    roomInput.value=roomCode;
+}
+function joinRoom(){
+    const roomCode=roomInput.value.trim();
+    if(!roomCode) return alert("Digite o código");
+    const roomRef=ref(db,"rooms/"+roomCode);
+    onValue(roomRef,snapshot=>{
+        if(snapshot.exists()){
+            const data=snapshot.val();
+            if(data.players.length>=2) { alert("Sala cheia"); return;}
+            data.players.push(nick);
+            data.messages.push(`${nick} entrou na sala 🟢`);
+            update(roomRef,{players:data.players,messages:data.messages});
+            listenRoom(roomCode,nick);
+        } else alert("Sala não encontrada");
+    },{onlyOnce:true});
+}
+function listenRoom(roomCode,myNick){
+    const roomRef=ref(db,"rooms/"+roomCode);
+    onValue(roomRef,snapshot=>{
+        if(snapshot.exists()){
+            const data=snapshot.val();
+            onlineBoard.innerHTML="";
+            data.board.forEach((v,i)=>{
+                const cell=document.createElement("div");
+                cell.className="cell";
+                cell.innerText=v;
+                cell.onclick=()=>{
+                    if(data.board[i]!="" || data.turn!==myNick) return;
+                    data.board[i]=data.turn;
+                    data.turn = data.turn==="X"?"O":"X";
+                    update(roomRef,{board:data.board,turn:data.turn});
+                }
+                onlineBoard.appendChild(cell);
+            })
+            statusOnline.innerHTML=`Turno: ${data.turn}<br>${data.messages.join("<br>")}`;
+        }
+    });
+}
+
+createRoomBtn.onclick=createRoom;
+joinRoomBtn.onclick=joinRoom;
+
+// -------- FUNÇÕES AUX --------
+function checkWin(b){ const combos=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; return combos.some(c=> b[c[0]]!=="" && b[c[0]]===b[c[1]] && b[c[1]]===b[c[2]]);}
+function checkDraw(b){ return b.every(c=>c!=="");}
+</script>
+</body>
+</html>
